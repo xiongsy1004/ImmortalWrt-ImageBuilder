@@ -68,24 +68,74 @@ if [ "$INCLUDE_DOCKER" = "yes" ]; then
     echo "Adding package: luci-i18n-dockerman-zh-cn"
 fi
 
-# 若构建openclash 则添加内核
+# 若构建 OpenClash 则添加对应架构的 Clash Meta 核心
 if echo "$PACKAGES" | grep -q "luci-app-openclash"; then
-    echo "✅ 已选择 luci-app-openclash，添加 openclash core"
+    echo "✅ 已选择 luci-app-openclash，准备添加 OpenClash Core"
+
     mkdir -p files/etc/openclash/core
-    # Download clash_meta
-    META_URL="https://raw.githubusercontent.com/vernesong/OpenClash/core/master/meta/clash-linux-arm64.tar.gz"
-    wget -qO- $META_URL | tar xOvz > files/etc/openclash/core/clash_meta
+
+    # 根据机型选择 Clash Meta Core
+    # R3P / MT7621 = mipsle-hardfloat
+    if [ "$PROFILE" = "xiaomi_mi-router-3-pro" ]; then
+        CORE_ARCH="mipsle-hardfloat"
+        echo "✅ 检测到 Xiaomi Mi Router 3 Pro / MT7621"
+        echo "✅ OpenClash Core 架构: $CORE_ARCH"
+    else
+        CORE_ARCH="arm64"
+        echo "ℹ️ 非 R3P，使用默认 ARM64 Core"
+    fi
+
+    # 下载 Clash Meta Core
+    META_URL="https://raw.githubusercontent.com/vernesong/OpenClash/core/master/meta/clash-linux-${CORE_ARCH}.tar.gz"
+
+    echo "正在下载 Clash Meta Core:"
+    echo "$META_URL"
+
+    if ! wget -qO- "$META_URL" | tar xOvz > files/etc/openclash/core/clash_meta; then
+        echo "❌ Clash Meta Core 下载失败"
+        exit 1
+    fi
+
     chmod +x files/etc/openclash/core/clash_meta
+
+    # 检查 Core 是否成功
+    if [ ! -s files/etc/openclash/core/clash_meta ]; then
+        echo "❌ Clash Meta Core 文件为空"
+        exit 1
+    fi
+
+    echo "✅ Clash Meta Core 准备完成"
+
     # Download GeoIP and GeoSite
-    wget -q https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download/geoip.dat -O files/etc/openclash/GeoIP.dat
-    wget -q https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download/geosite.dat -O files/etc/openclash/GeoSite.dat
-    # Download latest openclash Client
+    echo "正在下载 GeoIP / GeoSite..."
+
+    wget -q \
+      https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download/geoip.dat \
+      -O files/etc/openclash/GeoIP.dat
+
+    wget -q \
+      https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download/geosite.dat \
+      -O files/etc/openclash/GeoSite.dat
+
+    # Download latest OpenClash APK
+    echo "正在获取最新 OpenClash APK..."
+
     URL=$(curl -s https://api.github.com/repos/vernesong/OpenClash/releases/latest \
       | grep "browser_download_url.*apk" \
       | head -n1 \
       | cut -d '"' -f 4)
+
     echo "OpenClash latest apk: $URL"
+
+    if [ -z "$URL" ]; then
+        echo "❌ 未找到 OpenClash APK"
+        exit 1
+    fi
+
     wget "$URL" -P /home/build/immortalwrt/packages/
+
+    echo "✅ OpenClash APK 下载完成"
+
 else
     echo "⚪️ 未选择 luci-app-openclash"
 fi
